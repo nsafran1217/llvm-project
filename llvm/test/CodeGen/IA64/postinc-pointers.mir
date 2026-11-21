@@ -309,3 +309,56 @@ body: |
   bb.2:
     BR_RET $b0, 0, 1, 0, $p0
 ...
+---
+# n = n->next: the load of next steps n for the load at offset 28, but the
+# loop goes on from the pointer it loads, not from n + 28, so the access at
+# offset 16 keeps its add.
+name: load_next
+tracksRegLiveness: true
+body: |
+  ; CHECK-LABEL: name: load_next
+  ; CHECK: bb.0:
+  ; CHECK-NEXT:   successors: %bb.1(0x80000000)
+  ; CHECK-NEXT:   liveins: $r32
+  ; CHECK-NEXT: {{  $}}
+  ; CHECK-NEXT:   [[COPY:%[0-9]+]]:gr = COPY $r32
+  ; CHECK-NEXT:   [[COPY1:%[0-9]+]]:gr = COPY $r0
+  ; CHECK-NEXT: {{  $}}
+  ; CHECK-NEXT: bb.1:
+  ; CHECK-NEXT:   successors: %bb.1(0x40000000), %bb.2(0x40000000)
+  ; CHECK-NEXT: {{  $}}
+  ; CHECK-NEXT:   [[PHI:%[0-9]+]]:gr = PHI [[COPY1]], %bb.0, %3, %bb.1
+  ; CHECK-NEXT:   [[PHI1:%[0-9]+]]:gr = PHI [[COPY]], %bb.0, %5, %bb.1
+  ; CHECK-NEXT:   [[ADDS:%[0-9]+]]:gr = ADDS 16, [[PHI1]], $p0
+  ; CHECK-NEXT:   [[LD4_:%[0-9]+]]:gr = LD4 [[ADDS]], 0, $p0 :: (load (s32))
+  ; CHECK-NEXT:   [[LD8_i:%[0-9]+]]:gr, [[LD8_i1:%[0-9]+]]:gr = LD8_i [[PHI1]], 28, 0, $p0 :: (load (s64))
+  ; CHECK-NEXT:   [[LD4_1:%[0-9]+]]:gr = LD4 [[LD8_i1]], 0, $p0 :: (load (s32))
+  ; CHECK-NEXT:   [[ADD:%[0-9]+]]:gr = ADD [[LD4_]], [[PHI]], $p0
+  ; CHECK-NEXT:   [[ADD1:%[0-9]+]]:gr = ADD [[ADD]], [[LD4_1]], $p0
+  ; CHECK-NEXT:   BRCCi %bb.1, 1, [[LD8_i]], 0, implicit-def dead $p6, implicit-def dead $p7
+  ; CHECK-NEXT:   BRUNCOND %bb.2
+  ; CHECK-NEXT: {{  $}}
+  ; CHECK-NEXT: bb.2:
+  ; CHECK-NEXT:   $r8 = COPY [[ADD1]]
+  ; CHECK-NEXT:   BR_RET $b0, 0, 1, 0, $p0, implicit $r8
+  bb.0:
+    liveins: $r32
+    %1:gr = COPY $r32
+    %5:gr = COPY $r0
+
+  bb.1:
+    %0:gr = PHI %5, %bb.0, %2, %bb.1
+    %10:gr = PHI %1, %bb.0, %3, %bb.1
+    %11:gr = ADDS 16, %10, $p0
+    %12:gr = LD4 %11, 0, $p0 :: (load (s32))
+    %3:gr, %18:gr = LD8_i %10, 28, 0, $p0 :: (load (s64))
+    %19:gr = LD4 %18, 0, $p0 :: (load (s32))
+    %20:gr = ADD %12, %0, $p0
+    %2:gr = ADD %20, %19, $p0
+    BRCCi %bb.1, 1, %3, 0, implicit-def dead $p6, implicit-def dead $p7
+    BRUNCOND %bb.2
+
+  bb.2:
+    $r8 = COPY %2
+    BR_RET $b0, 0, 1, 0, $p0, implicit $r8
+...

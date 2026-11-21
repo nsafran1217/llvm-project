@@ -270,7 +270,12 @@ bool IA64PostIncPointers::runOnLoop(MachineBasicBlock &MBB,
       if (!isUnpredicated(*Step) || Step->getOperand(2).getReg() != Ptr)
         continue;
       Stride = Step->getOperand(1).getImm();
-    } else if (std::optional<int64_t> Inc = getPostIncrement(*Step, Ptr)) {
+    } else if (std::optional<int64_t> Inc = getPostIncrement(*Step, Ptr);
+               Inc && Step->getOperand(Step->getNumExplicitDefs() - 1)
+                              .getReg() == Next) {
+      // The pointer is the address the access steps, not what a load reads
+      // through it: in n = n->next, ld8 next = [n], 28 steps n by 28 for an
+      // access at that offset, but the loop goes on from the value loaded.
       Stride = *Inc;
     } else {
       continue;
